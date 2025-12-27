@@ -1,0 +1,244 @@
+import { UnstructuredClient } from 'unstructured-client';
+import { Pinecone } from '@pinecone-database/pinecone';
+import OpenAI from 'openai';
+import { Strategy } from 'unstructured-client/sdk/models/shared';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export interface DocumentSource {
+  type: 'faq' | 'services' | 'policies' | 'blog' | 'portfolio' | 'portfolio_images';
+  title: string;
+  content: string;
+  metadata: {
+    source: string;
+    category?: string;
+    priority?: number; // 1-5 (5 = highest)
+    lastUpdated: Date;
+    author?: string;
+    tags?: string[];
+  };
+}
+
+export interface Chunk {
+  content: string;
+  metadata: Record<string, any>;
+}
+
+/**
+ * STEP 1: Ingest documents from multiple sources
+ * This is a mock implementation. In a real scenario, you would fetch from DB/CMS.
+ */
+export async function ingestDocuments(): Promise<DocumentSource[]> {
+  // Mock data for now
+  const sources: DocumentSource[] = [
+    {
+      type: 'faq',
+      title: 'General FAQ',
+      content: 'How much does a tattoo cost? The minimum price is $150. Hourly rate is $150-200 depending on the artist.',
+      metadata: { source: 'faq_system', category: 'pricing', priority: 5, lastUpdated: new Date() }
+    },
+    {
+      type: 'services',
+      title: 'Tattoo Services',
+      content: 'We offer Custom Design, Realism, Traditional, and Cover Ups. Consultations are free.',
+      metadata: { source: 'services_db', category: 'services', priority: 5, lastUpdated: new Date() }
+    },
+    {
+      type: 'policies',
+      title: 'Deposit Policy',
+      content: 'A non-refundable deposit is required to book. $50 for small pieces, $100 for large ones.',
+      metadata: { source: 'policy_doc', category: 'booking', priority: 5, lastUpdated: new Date() }
+    },
+     {
+      type: 'care',
+      title: 'Aftercare Guide',
+      content: 'Keep the bandage on for 2-4 hours. Wash with unscented soap. Apply a thin layer of aquifer or recommended lotion.',
+      metadata: { source: 'care_guide', category: 'care', priority: 5, lastUpdated: new Date() }
+    }
+  ] as DocumentSource[];
+
+  return sources;
+}
+
+/**
+ * STEP 2: Process documents with Unstructured.io
+ * Note: This requires UNSTRUCTURED_API_KEY if using their SaaS, or local container.
+ * Falling back to simple text processing if client fails or not configured, for demo purposes.
+ */
+export async function processDocuments(documents: DocumentSource[]) {
+  // For this local setup without a running Unstructured container, we will pass through text.
+  // In production, use the client:
+  /*
+  const client = new UnstructuredClient({
+      serverURL: process.env.UNSTRUCTURED_API_URL,
+      security: { apiKeyAuth: process.env.UNSTRUCTURED_API_KEY },
+  });
+  */
+  
+  // Mocking the "partition" result structures
+  return documents.map(doc => ({
+      text: doc.content,
+      metadata: doc.metadata
+  }));
+}
+
+/**
+ * STEP 3: Semantic Chunking
+ */
+export async function semanticChunking(
+  processedDocs: any[],
+  chunkSize: number = 800,
+  overlapSize: number = 100
+): Promise<Chunk[]> {
+  const chunks: Chunk[] = [];
+
+  for (const doc of processedDocs) {
+    const paragraphs = doc.text.split(/\n\n+/);
+
+    let currentChunk = '';
+    for (const para of paragraphs) {
+      const potential = currentChunk + (currentChunk ? '\n\n' : '') + para;
+
+      if (potential.length > chunkSize && currentChunk) {
+        chunks.push({
+          content: currentChunk,
+          metadata: {
+            ...doc.metadata,
+            tokens: Math.ceil(currentChunk.length / 4),
+            originalLength: currentChunk.length,
+          },
+        });
+
+        currentChunk = currentChunk.slice(-overlapSize) + para;
+      } else {
+        currentChunk = potential;
+      }
+    }
+
+    if (currentChunk) {
+      chunks.push({
+        content: currentChunk,
+        metadata: {
+          ...doc.metadata,
+          tokens: Math.ceil(currentChunk.length / 4),
+        },
+      });
+    }
+  }
+
+  return chunks;
+}
+
+/**
+ * Helper: Generate Embedding using OpenAI
+ */
+async function generateEmbedding(text: string): Promise<number[]> {
+  const response = await openai.embeddings.create({
+    model: 'text-embedding-3-small',
+    input: text,
+  });
+  return response.data[0].embedding;
+}
+
+/**
+ * STEP 4: Store chunks in Pinecone
+ */
+export async function storeChunksInPinecone(chunks: Chunk[]) {
+  const pinecone = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY!,
+  });
+
+  const indexName = process.env.PINECONE_INDEX_NAME || 'black-ink';
+  const index = pinecone.index(indexName);
+  
+  const vectors = [];
+
+  console.log(`Generating embeddings for ${chunks.length} chunks...`);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const embedding = await generateEmbedding(chunks[i].content);
+
+    vectors.push({
+      id: `chunk-${Date.now()}-${i}`,
+      values: embedding,
+      metadata: {
+        text: chunks[i].content.substring(0, 4000), // Limit metadata size
+        ...chunks[i].metadata,
+        chunkIndex: i,
+      },
+    });
+  }
+
+  // Batch upsert
+  const batchSize = 100;
+  for (let i = 0; i < vectors.length; i += batchSize) {
+    const batch = vectors.slice(i, i + batchSize);
+    await index.upsert(batch);
+    console.log(`Upserted batch ${i / batchSize + 1}`);
+  }
+
+  console.log(`✅ ${vectors.length} chunks stored in Pinecone`);
+}
+
+/**
+ * STEP 5: Intelligent Hybrid Search
+ */
+export async function hybridSearch(
+  query: string,
+  topK: number = 5,
+  filters?: Record<string, any>
+) {
+  const pinecone = new Pinecone({
+      apiKey: process.env.PINECONE_API_KEY!,
+  });
+  const indexName = process.env.PINECONE_INDEX_NAME || 'black-ink';
+  const index = pinecone.index(indexName);
+
+  // 1. Semantic Search
+  const queryEmbedding = await generateEmbedding(query);
+
+  const semanticResults = await index.query({
+    vector: queryEmbedding,
+    topK: topK * 1.5, 
+    includeMetadata: true,
+    filter: filters,
+  });
+
+  // 2. Keyword Search (Simple Client-side scoring for demo)
+  // In a real "Hybrid" search with Pinecone, you might use sparse-dense vectors (Splade) if supported,
+  // or simple re-ranking like here.
+  const keywords = query.toLowerCase().split(/\s+/).filter((k) => k.length > 3);
+  const keywordScores = new Map<string, number>();
+
+  semanticResults.matches.forEach((match) => {
+    let score = 0;
+    const text = (match.metadata?.text as string)?.toLowerCase() || '';
+
+    keywords.forEach((keyword) => {
+      if (text.includes(keyword)) score++;
+    });
+
+    if (score > 0) {
+      keywordScores.set(match.id, score);
+    }
+  });
+
+  // 3. Combine Scores (70% Semantic, 30% Keyword)
+  const combined = semanticResults.matches
+    .map((m) => ({
+      ...m,
+      combinedScore: (m.score || 0) * 0.7 + (keywordScores.get(m.id) || 0) * 0.3,
+    }))
+    .sort((a, b) => b.combinedScore - a.combinedScore)
+    .slice(0, topK);
+
+  return combined.map((m) => ({
+    id: m.id,
+    content: (m.metadata?.text as string) || '',
+    score: m.combinedScore,
+    source: (m.metadata?.source as string) || '',
+    category: (m.metadata?.category as string) || '',
+  }));
+}
