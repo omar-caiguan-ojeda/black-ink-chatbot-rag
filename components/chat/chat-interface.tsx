@@ -103,15 +103,15 @@ export function ChatInterface() {
                                 if (part.type === 'reasoning') return <span key={i} className="block italic text-zinc-500 text-xs mb-1">{part.text}</span>;
                                 return null;
                             })
-                        ) : typeof m.content === 'string' ? (
-                            <span className="whitespace-pre-wrap">{m.content}</span>
-                        ) : Array.isArray(m.content) ? (
-                            (m.content as any[]).map((part, i) => {
+                        ) : typeof (m as any).content === 'string' ? (
+                            <span className="whitespace-pre-wrap">{(m as any).content}</span>
+                        ) : Array.isArray((m as any).content) ? (
+                            ((m as any).content as any[]).map((part, i) => {
                                 if (part.type === 'text') return <span key={i} className="whitespace-pre-wrap">{part.text}</span>;
                                 return null;
                             })
                         ) : (
-                            <span>{String(m.content)}</span>
+                            <span>{String((m as any).content || '')}</span>
                         )}
                     </div>
                 </div>
