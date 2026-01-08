@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🤖 Black Ink AI - Professional RAG Chatbot
 
-## Getting Started
+![Vercel AI SDK](https://img.shields.io/badge/Vercel_AI_SDK-3.0-black) ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-green) ![Pinecone](https://img.shields.io/badge/Pinecone-Vector_DB-blue)
 
-First, run the development server:
+**Black Ink AI** is an advanced, enterprise-grade AI assistant designed to automate client interactions for the Black Ink Tattoo Studio. It leverages **RAG (Retrieval-Augmented Generation)** to provide accurate, context-aware responses about services, pricing, aftercare, and availability, acting as a 24/7 intelligent concierge.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## 🧠 Core Capabilities
+
+*   **📚 RAG Pipeline**: Ingests and processes studio documents (FAQs, Policies, Services) using **Unstructured.io** and stores semantic embeddings in **Pinecone** for precise information retrieval.
+*   **🕵️ Multi-Agent Architecture**: Specialized agents for different needs:
+    *   **Booking Agent**: Handles availability checks and appointment scheduling.
+    *   **Product Specialist**: Advises on tattoo styles, artists, and designs.
+    *   **Customer Support**: Resolves issues and answers policy questions.
+    *   **Sales Assistant**: Identifies opportunities for upsells and promotions.
+*   **💾 Smart Memory (Mem0)**: Remembers client details (preferences, previous tattoos, medical info) to provide a personalized experience across sessions.
+*   **🛡️ Enterprise Security**: PII detection, rate limiting, and secure authentication via Clerk.
+
+---
+
+## 🛠️ Tech Stack
+
+### AI & Data
+*   **Orchestration**: Vercel AI SDK, LangChain.js
+*   **Models**: OpenAI GPT-4 Turbo (Reasoning), GPT-4o Mini (Speed)
+*   **Vector DB**: Pinecone (Hybrid Search: Semantic + Keyword)
+*   **Embeddings**: text-embedding-3-small
+*   **ETL**: Unstructured.io, RAGFlow
+
+### Infrastructure
+*   **Framework**: Next.js 15
+*   **Database**: Supabase (PostgreSQL)
+*   **Caching**: Redis / Vercel KV
+*   **Monitoring**: RAGAS (Evaluation), Datadog, Sentry
+
+---
+
+## 🏗️ Architecture Overview
+
+```mermaid
+graph TD
+    A[User Query] --> B{Intent Classifier}
+    B -->|Booking| C[Booking Agent]
+    B -->|Info| D[Product Agent]
+    B -->|Support| E[Support Agent]
+    
+    C & D & E --> F[Hybrid Retrieval]
+    F --> G[(Pinecone Vector DB)]
+    F --> H[(Supabase Knowledge Base)]
+    
+    C & D & E --> I[Client Memory (Mem0)]
+    
+    C & D & E --> J[LLM Generation (GPT-4)]
+    J --> K[Response]
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🚀 Getting Started
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Prerequisites
+*   Node.js 20+
+*   OpenAI API Key
+*   Pinecone API Key
+*   Supabase Project
 
-## Learn More
+### Installation
 
-To learn more about Next.js, take a look at the following resources:
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/your-username/black-ink.git
+    cd black-ink/chatbot-rag
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2.  **Install dependencies**
+    ```bash
+    pnpm install
+    ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3.  **Environment Setup**
+    Create a `.env` file:
+    ```bash
+    cp env.example .env
+    ```
+    *Configure `OPENAI_API_KEY`, `PINECONE_API_KEY`, `SUPABASE_URL`, etc.*
 
-## Deploy on Vercel
+4.  **Ingest Knowledge Base**
+    Run the ingestion script to populate the vector database:
+    ```bash
+    pnpm run ingest
+    ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+5.  **Run Development Server**
+    ```bash
+    pnpm dev
+    ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 📈 Evaluation
+
+This project uses **RAGAS** to continuously evaluate the quality of the chatbot:
+*   **Faithfulness**: Does the answer come from the context?
+*   **Answer Relevancy**: Is the answer useful to the user?
+*   **Context Recall**: Did we retrieve the right documents?
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions to improve the agent's capabilities. Please read `CONTRIBUTING.md` for guidelines on how to add new tools or improve prompts.

@@ -35,26 +35,26 @@ export async function ingestDocuments(): Promise<DocumentSource[]> {
   const sources: DocumentSource[] = [
     {
       type: 'faq',
-      title: 'General FAQ',
-      content: 'How much does a tattoo cost? The minimum price is $150. Hourly rate is $150-200 depending on the artist.',
+      title: 'PF Generales (FAQ)',
+      content: '¿Cuánto cuesta un tatuaje? El precio mínimo es de $150. La tarifa por hora es de $150-200 dependiendo del artista.',
       metadata: { source: 'faq_system', category: 'pricing', priority: 5, lastUpdated: new Date() }
     },
     {
       type: 'services',
-      title: 'Tattoo Services',
-      content: 'We offer Custom Design, Realism, Traditional, and Cover Ups. Consultations are free.',
+      title: 'Servicios de Tatuaje',
+      content: 'Ofrecemos Diseño Personalizado, Realismo, Tradicional y Cover Ups. Las consultas son gratuitas.',
       metadata: { source: 'services_db', category: 'services', priority: 5, lastUpdated: new Date() }
     },
     {
       type: 'policies',
-      title: 'Deposit Policy',
-      content: 'A non-refundable deposit is required to book. $50 for small pieces, $100 for large ones.',
+      title: 'Política de Depósitos',
+      content: 'Se requiere un depósito no reembolsable para reservar. $50 para piezas pequeñas, $100 para las grandes.',
       metadata: { source: 'policy_doc', category: 'booking', priority: 5, lastUpdated: new Date() }
     },
-     {
+    {
       type: 'care',
-      title: 'Aftercare Guide',
-      content: 'Keep the bandage on for 2-4 hours. Wash with unscented soap. Apply a thin layer of aquifer or recommended lotion.',
+      title: 'Guía de Cuidados',
+      content: 'Mantén el vendaje durante 2-4 horas. Lava con jabón sin aroma. Aplica una capa fina de Aquaphor o la loción recomendada.',
       metadata: { source: 'care_guide', category: 'care', priority: 5, lastUpdated: new Date() }
     }
   ] as DocumentSource[];
@@ -135,11 +135,19 @@ export async function semanticChunking(
  * Helper: Generate Embedding using OpenAI
  */
 async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
-    input: text,
-  });
-  return response.data[0].embedding;
+  if (!text || !text.trim()) {
+    return new Array(1536).fill(0); // Return zero vector or handle appropriately
+  }
+  try {
+    const response = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: text,
+    });
+    return response.data[0].embedding;
+  } catch (error) {
+    console.error("Error generating embedding:", error);
+    return new Array(1536).fill(0);
+  }
 }
 
 /**
@@ -190,6 +198,10 @@ export async function hybridSearch(
   topK: number = 5,
   filters?: Record<string, any>
 ) {
+  if (!query || !query.trim()) {
+      return [];
+  }
+
   const pinecone = new Pinecone({
       apiKey: process.env.PINECONE_API_KEY!,
   });
@@ -201,7 +213,7 @@ export async function hybridSearch(
 
   const semanticResults = await index.query({
     vector: queryEmbedding,
-    topK: topK * 1.5, 
+    topK: Math.ceil(topK * 1.5), 
     includeMetadata: true,
     filter: filters,
   });
@@ -233,6 +245,11 @@ export async function hybridSearch(
     }))
     .sort((a, b) => b.combinedScore - a.combinedScore)
     .slice(0, topK);
+
+  console.log(`🔍 Hybrid Search found ${combined.length} relevant matches.`);
+  if (combined.length > 0) {
+      console.log(`🏆 Top Match Score: ${combined[0].combinedScore}`);
+  }
 
   return combined.map((m) => ({
     id: m.id,

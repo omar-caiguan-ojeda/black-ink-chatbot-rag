@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,12 +11,32 @@ import { Send, User, Bot, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function ChatInterface() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: '/api/chat',
-    body: {
-      userId: 'user_123_mock', // Hardcoded for demo
+  const { messages, sendMessage, status } = useChat({
+    // api defaults to /api/chat
+    // @ts-ignore - Headers are supported by fetch but type might be stricter
+    headers: {
+      'x-user-id': 'user_123_mock', // Hardcoded for demo
     }
   });
+
+  const isLoading = status === 'submitted' || status === 'streaming';
+
+  const [input, setInput] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    // Construct message with parts for Vercel AI SDK v5
+    await sendMessage({ 
+        role: 'user', 
+        parts: [{ type: 'text', text: input }] 
+    } as any); // Cast to any to avoid strict type checks if UI_MESSAGE generic is tricky
+    setInput('');
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value);
+  };
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -76,9 +96,24 @@ export function ChatInterface() {
                       : "bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-tl-sm"
                   )}
                 >
-                  <div className="prose prose-invert prose-sm">
-                      {m.content}
-                  </div>
+                    <div className="prose prose-invert prose-sm">
+                        {Array.isArray(m.parts) && m.parts.length > 0 ? (
+                            m.parts.map((part, i) => {
+                                if (part.type === 'text') return <span key={i} className="whitespace-pre-wrap">{part.text}</span>;
+                                if (part.type === 'reasoning') return <span key={i} className="block italic text-zinc-500 text-xs mb-1">{part.text}</span>;
+                                return null;
+                            })
+                        ) : typeof m.content === 'string' ? (
+                            <span className="whitespace-pre-wrap">{m.content}</span>
+                        ) : Array.isArray(m.content) ? (
+                            (m.content as any[]).map((part, i) => {
+                                if (part.type === 'text') return <span key={i} className="whitespace-pre-wrap">{part.text}</span>;
+                                return null;
+                            })
+                        ) : (
+                            <span>{String(m.content)}</span>
+                        )}
+                    </div>
                 </div>
               </div>
             ))}

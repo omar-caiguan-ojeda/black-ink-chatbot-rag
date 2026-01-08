@@ -1,11 +1,8 @@
 
-import OpenAI from 'openai';
+import { openai } from '@ai-sdk/openai';
+import { streamText, generateText } from 'ai';
 import { hybridSearch } from '@/lib/rag/pipeline';
-import { retrieveClientMemory } from '@/lib/memory/client-memory';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { retrieveClientMemory, extractAndSaveInsights } from '@/lib/memory/client-memory';
 
 export enum AgentRole {
   BOOKING = 'booking',           // Appointment management
@@ -68,7 +65,8 @@ Eres un asistente especializado en reservar tatuajes. Tu objetivo es:
     `,
     retrieverSettings: {
       topK: 5,
-      filters: { source: 'services' },
+      // Broadened filters to include pricing as it's relevant for bookings
+      filters: { category: { $in: ['booking', 'pricing', 'services'] } },
     },
   },
 
@@ -107,7 +105,7 @@ Si cliente menciona:
     `,
     retrieverSettings: {
       topK: 8,
-      filters: { source: 'portfolio' },
+      filters: { category: { $in: ['services', 'pricing'] } },
     },
   },
 
@@ -144,7 +142,7 @@ Eres especialista en soporte. Respondes:
     `,
     retrieverSettings: {
       topK: 10,
-      filters: { source: 'policies' },
+      filters: { category: { $in: ['pricing', 'services'] } },
     },
   },
 
@@ -235,8 +233,9 @@ Panel de control para administradores:
  * STEP 1: Detect User Intent
  */
 export async function detectIntentAndRoute(userMessage: string): Promise<AgentRole> {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+  const { text } = await generateText({
+    // @ts-ignore
+    model: openai('gpt-4o-mini'),
     messages: [
       {
         role: 'user',
@@ -247,6 +246,7 @@ export async function detectIntentAndRoute(userMessage: string): Promise<AgentRo
 - sales: Quiere información de ofertas/paquetes
 - care: Pregunta sobre cuidados post-tatuaje
 - admin: Solo personal administrativo
+- general: Saludos, charla casual o preguntas ambiguas
 
 Mensaje: "${userMessage}"
 
@@ -256,8 +256,11 @@ Responde SOLO con la categoría.`,
     temperature: 0.3,
   });
 
-  const category = (response.choices[0].message.content || 'product').toLowerCase().trim();
+  const category = (text || 'general').toLowerCase().trim();
   
+  // Map 'general' to 'product' agent as it's the most flexible
+  if (category === 'general') return AgentRole.PRODUCT;
+
   // Validate if it matches an AgentRole
   if (Object.values(AgentRole).includes(category as AgentRole)) {
       return category as AgentRole;
@@ -268,6 +271,25 @@ Responde SOLO con la categoría.`,
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  parts?: any[]; // Allow for Vercel AI SDK v6 structure
+}
+
+function extractText(message: any): string {
+    if (typeof message.content === 'string') return message.content;
+    if (Array.isArray(message.parts)) {
+        return message.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join(' ');
+    }
+    // Fallback for intermediate formats
+    if (Array.isArray(message.content)) {
+         return message.content
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join(' ');
+    }
+    return '';
 }
 
 interface ClientContext {
@@ -286,9 +308,10 @@ export async function executeAgent(
   clientContext?: ClientContext
 ) {
   const config = AGENT_CONFIGS[role];
+  console.log(`🤖 Executing Agent: ${role} for user: ${userId}`);
 
   // Retrieve relevant documents (RAG)
-  const lastMsg = messages[messages.length - 1].content;
+  const lastMsg = extractText(messages[messages.length - 1]);
   const context = await hybridSearch(
     lastMsg,
     config.retrieverSettings.topK,
@@ -322,16 +345,29 @@ ${context.map((c) => `### [Fuente: ${c.source}]\n${c.content}`).join('\n\n')}
   // Call LLM with Streaming
   // Note: We need to convert 'system' role if not supported by types strictly, 
   // but OpenAI supports 'system'.
-  const stream = await openai.chat.completions.create({
-    model: config.model,
+  // Call LLM with Streaming
+  // Note: We need to convert 'system' role if not supported by types strictly, 
+  // but OpenAI supports 'system'.
+  const result = streamText({
+    // @ts-ignore
+    model: openai(config.model),
     messages: [
       { role: 'system', content: systemPrompt },
-      ...messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content })),
+      ...messages.map((m) => ({ 
+          role: m.role as 'user' | 'assistant' | 'system', 
+          content: extractText(m) 
+      })),
     ],
     temperature: config.temperature,
-    max_tokens: config.maxTokens,
-    stream: true,
+    maxOutputTokens: config.maxTokens,
+    onFinish: async ({ text }) => {
+       console.log(`✨ Agent generated response (${text.length} chars)`);
+       // Save insights using the last user message
+       // We need to pass visitorId to this function or scope
+       // visitorId is passed to executeAgent as userId arg
+       await extractAndSaveInsights(userId, lastMsg);
+    },
   });
 
-  return stream;
+  return result;
 }
