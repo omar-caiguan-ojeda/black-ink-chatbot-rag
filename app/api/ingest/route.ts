@@ -1,5 +1,5 @@
 
-import { ingestDocuments, processDocuments, semanticChunking, storeChunksInPinecone } from '@/lib/rag/pipeline';
+import { ingestDocuments, processDocuments, processUploadedDocument, semanticChunking, storeChunksInPinecone } from '@/lib/rag/pipeline';
 
 export const maxDuration = 300; // 5 minutes max for ingestion
 
@@ -12,15 +12,36 @@ export async function POST(req: Request) {
        // return new Response('Unauthorized', { status: 401 });
     }
 
-    console.log("🚀 Starting Ingestion Pipeline...");
+    // Check Content-Type to distinguish between JSON (trigger mock) and Multipart (file upload)
+    const contentType = req.headers.get('content-type') || '';
+    
+    let processedDocs = [];
 
-    // 1. Ingest
-    const rawDocs = await ingestDocuments();
-    console.log(`📄 Ingested ${rawDocs.length} documents.`);
+    if (contentType.includes('multipart/form-data')) {
+        // Handle File Upload
+        const formData = await req.formData();
+        const file = formData.get('file') as File;
+        
+        if (!file) {
+            return Response.json({ error: 'No file provided' }, { status: 400 });
+        }
 
-    // 2. Process
-    const processedDocs = await processDocuments(rawDocs);
-    console.log(`⚙️ Processed ${processedDocs.length} documents.`);
+        console.log(`📂 Received file: ${file.name} (${file.size} bytes)`);
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        const result = await processUploadedDocument(buffer, file.name);
+        processedDocs = [result];
+        console.log(`⚙️ Processed file with Unstructured.`);
+        
+    } else {
+        // Handle Default Mock Ingestion (JSON trigger)
+        console.log("🚀 Starting Mock Ingestion Pipeline...");
+        const rawDocs = await ingestDocuments();
+        console.log(`📄 Ingested ${rawDocs.length} mock documents.`);
+        processedDocs = await processDocuments(rawDocs);
+        console.log(`⚙️ Processed mock documents.`);
+    }
 
     // 3. Chunk
     const chunks = await semanticChunking(processedDocs);
@@ -33,7 +54,6 @@ export async function POST(req: Request) {
     return Response.json({ 
         success: true, 
         stats: {
-            docs: rawDocs.length,
             chunks: chunks.length 
         } 
     });

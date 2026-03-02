@@ -1,112 +1,104 @@
 # 🤖 Black Ink AI - Professional RAG Chatbot
 
-![Vercel AI SDK](https://img.shields.io/badge/Vercel_AI_SDK-3.0-black) ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-green) ![Pinecone](https://img.shields.io/badge/Pinecone-Vector_DB-blue)
+![Vercel AI SDK](https://img.shields.io/badge/Vercel_AI_SDK-6.0-black) ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-green) ![Pinecone](https://img.shields.io/badge/Pinecone-Vector_DB-blue) ![Mem0](https://img.shields.io/badge/Mem0-Memory-purple)
 
-**Black Ink AI** is an advanced, enterprise-grade AI assistant designed to automate client interactions for the Black Ink Tattoo Studio. It leverages **RAG (Retrieval-Augmented Generation)** to provide accurate, context-aware responses about services, pricing, aftercare, and availability, acting as a 24/7 intelligent concierge.
+**Black Ink AI** es un asistente avanzado de nivel empresarial diseñado para automatizar las interacciones con los clientes del estudio Black Ink. Utiliza **RAG (Retrieval-Augmented Generation)** para proporcionar respuestas precisas y conscientes del contexto sobre servicios, precios, cuidados posteriores y disponibilidad, actuando como un conserje inteligente 24/7.
 
 ---
 
-## 🧠 Core Capabilities
+## 🧠 Estado Actual
 
-*   **📚 RAG Pipeline**: Ingests and processes studio documents (FAQs, Policies, Services) using **Unstructured.io** and stores semantic embeddings in **Pinecone** for precise information retrieval.
-*   **🕵️ Multi-Agent Architecture**: Specialized agents for different needs:
-    *   **Booking Agent**: Handles availability checks and appointment scheduling.
-    *   **Product Specialist**: Advises on tattoo styles, artists, and designs.
-    *   **Customer Support**: Resolves issues and answers policy questions.
-    *   **Sales Assistant**: Identifies opportunities for upsells and promotions.
-*   **💾 Smart Memory (Mem0)**: Remembers client details (preferences, previous tattoos, medical info) to provide a personalized experience across sessions.
-*   **🛡️ Enterprise Security**: PII detection, rate limiting, and secure authentication via Clerk.
+* **UI/UX renovada (Mar 2026)**: Interfaz del chat rediseñada con **Framer Motion** (animaciones), gradientes, glow, quick actions (Estilos, Citas, Cuidados, Precios) y branding con `blackink.PNG`.
+* **📚 Pipeline RAG Robusto**: Ingesta y procesamiento de documentos del estudio. Base de conocimientos en español (FAQ, Servicios, Políticas) optimizada para búsquedas semánticas.
+* **🕵️ Arquitectura Multi-Agente**:
+  * **Booking Agent**: Maneja la verificación de disponibilidad y agenda.
+  * **Product Specialist**: Aconseja sobre estilos de tatuaje (Realismo, Tradicional, etc.) y artistas.
+  * **Customer Support**: Resuelve dudas sobre cuidados post-tatuaje y políticas de depósito.
+* **⚡ Streaming**: Respuestas en tiempo real con Vercel AI SDK v6.
+* **🇪🇸 Español Nativo**: Optimizado para consultas locales.
+* **💾 Memoria base (Mem0)**: Contexto de sesión inicial.
+
+> Embed: la landing usa el iframe `/embed` de este proyecto para mostrar el asistente en `app-web`.
+
+---
+
+## 🚀 Roadmap hacia Producto Premium
+
+Para convertir este MVP en un SaaS de clase mundial para estudios de tatuajes, estamos implementando las siguientes características:
+
+### 1. Ingesta Profesional (Unstructured.io)
+- **Objetivo**: Permitir al estudio subir sus propios PDFs ("Catálogo 2025.pdf", "Guía_Cuidados.pdf") sin tocar código.
+- **Tecnología**: Integración con `Unstructured` para procesar tablas, imágenes y maquetación compleja en documentos reales.
+
+### 2. CRM & Memoria a Largo Plazo (Mem0 Avanzado)
+- **Objetivo**: Que el bot recuerde al cliente entre sesiones ("Hola Juan, ¿qué tal sanó tu tribal de la semana pasada?").
+- **Tecnología**: Mem0 para almacenar preferencias de estilo, historial de tatuajes y datos médicos relevantes (alergias) de forma segura.
+
+### 3. Visual RAG (Catálogos Visuales)
+- **Objetivo**: "Mostrar, no solo contar". Si el usuario pide "Realismo" o "Tribal", el bot debe responder con miniaturas y links de trabajos reales.
+- **Tecnología (plan)**: Catálogo en **Cloudinary** (o Supabase Storage) con tags por estilo y metadata; el bot devolverá payload `images[]` para render en UI.
+
+### 4. Evaluación y Auditoría (RAGAS)
+- **Objetivo**: Garantizar la calidad de las respuestas para clientes empresariales.
+- **Tecnología**: Pipeline de evaluación continua midiendo *Faithfulness* (fidelidad al contexto) y *Answer Relevancy*.
 
 ---
 
 ## 🛠️ Tech Stack
 
 ### AI & Data
-*   **Orchestration**: Vercel AI SDK, LangChain.js
-*   **Models**: OpenAI GPT-4 Turbo (Reasoning), GPT-4o Mini (Speed)
-*   **Vector DB**: Pinecone (Hybrid Search: Semantic + Keyword)
+*   **Orquestación**: Vercel AI SDK (versión 6.0+)
+*   **Modelos**: OpenAI GPT-4o / GPT-4o-mini
+*   **Vector DB**: Pinecone (Búsqueda Híbrida: Semántica + Palabras Clave)
+*   **Memoria**: Mem0
 *   **Embeddings**: text-embedding-3-small
-*   **ETL**: Unstructured.io, RAGFlow
 
-### Infrastructure
-*   **Framework**: Next.js 15
-*   **Database**: Supabase (PostgreSQL)
-*   **Caching**: Redis / Vercel KV
-*   **Monitoring**: RAGAS (Evaluation), Datadog, Sentry
-
----
-
-## 🏗️ Architecture Overview
-
-```mermaid
-graph TD
-    A[User Query] --> B{Intent Classifier}
-    B -->|Booking| C[Booking Agent]
-    B -->|Info| D[Product Agent]
-    B -->|Support| E[Support Agent]
-    
-    C & D & E --> F[Hybrid Retrieval]
-    F --> G[(Pinecone Vector DB)]
-    F --> H[(Supabase Knowledge Base)]
-    
-    C & D & E --> I[Client Memory (Mem0)]
-    
-    C & D & E --> J[LLM Generation (GPT-4)]
-    J --> K[Response]
-```
+### Infraestructura
+*   **Framework**: Next.js 15 (App Router)
+*   **Lenguaje**: TypeScript
+*   **Estilos**: Tailwind CSS + Shadcn/UI
+*   **Base de Datos**: Supabase (PostgreSQL)
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### Prerrequisitos
 *   Node.js 20+
-*   OpenAI API Key
-*   Pinecone API Key
-*   Supabase Project
+*   Claves API: OpenAI, Pinecone, Mem0.
 
-### Installation
+### Instalación
 
-1.  **Clone the repository**
+1.  **Clonar el repositorio**
     ```bash
     git clone https://github.com/your-username/black-ink.git
     cd black-ink/chatbot-rag
     ```
 
-2.  **Install dependencies**
+2.  **Instalar dependencias**
     ```bash
     pnpm install
     ```
 
-3.  **Environment Setup**
-    Create a `.env` file:
+3.  **Configurar Variables de Entorno**
+    Crea un archivo `.env` basado en `env.example`:
     ```bash
     cp env.example .env
     ```
-    *Configure `OPENAI_API_KEY`, `PINECONE_API_KEY`, `SUPABASE_URL`, etc.*
+    *Configura `OPENAI_API_KEY`, `PINECONE_API_KEY`, etc.*
 
-4.  **Ingest Knowledge Base**
-    Run the ingestion script to populate the vector database:
+4.  **Ingesta de Datos (Setup Inicial)**
+    Carga la base de conocimientos básica en Pinecone:
     ```bash
-    pnpm run ingest
+    curl -X POST http://localhost:3000/api/ingest -H "Content-Type: application/json" -d '{}'
     ```
 
-5.  **Run Development Server**
+5.  **Correr Servidor de Desarrollo**
     ```bash
     pnpm dev
     ```
 
 ---
 
-## 📈 Evaluation
-
-This project uses **RAGAS** to continuously evaluate the quality of the chatbot:
-*   **Faithfulness**: Does the answer come from the context?
-*   **Answer Relevancy**: Is the answer useful to the user?
-*   **Context Recall**: Did we retrieve the right documents?
-
----
-
-## 🤝 Contributing
-
-We welcome contributions to improve the agent's capabilities. Please read `CONTRIBUTING.md` for guidelines on how to add new tools or improve prompts.
+## 🤝 Contribuir
+¡Bienvenido al equipo! Por favor lee `CONTRIBUTING.md` para guías sobre cómo añadir nuevos agentes o mejorar los prompts.

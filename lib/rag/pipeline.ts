@@ -67,21 +67,75 @@ export async function ingestDocuments(): Promise<DocumentSource[]> {
  * Note: This requires UNSTRUCTURED_API_KEY if using their SaaS, or local container.
  * Falling back to simple text processing if client fails or not configured, for demo purposes.
  */
+/**
+ * STEP 2: Process documents with Unstructured.io
+ * Now supporting real file processing via Unstructured API.
+ */
 export async function processDocuments(documents: DocumentSource[]) {
-  // For this local setup without a running Unstructured container, we will pass through text.
-  // In production, use the client:
-  /*
-  const client = new UnstructuredClient({
-      serverURL: process.env.UNSTRUCTURED_API_URL,
-      security: { apiKeyAuth: process.env.UNSTRUCTURED_API_KEY },
-  });
-  */
-  
-  // Mocking the "partition" result structures
+  // If we have an API key, we could try to use Unstructured for text improvement, 
+  // but for now, we'll keep the pass-through for existing text-based sources (mock data).
+  // Real file processing happens in `processUploadedDocument`.
   return documents.map(doc => ({
       text: doc.content,
       metadata: doc.metadata
   }));
+}
+
+/**
+ * Process a distinct file upload using Unstructured
+ */
+export async function processUploadedDocument(fileBuffer: Buffer, fileName: string) {
+    const apiKey = process.env.UNSTRUCTURED_API_KEY;
+    const apiUrl = process.env.UNSTRUCTURED_API_URL || 'https://api.unstructured.io/general/v0/general';
+
+    if (!apiKey) {
+        console.warn("⚠️ No UNSTRUCTURED_API_KEY found. Falling back to simple text extraction if possible or erroring.");
+        // Fallback for text files if no key
+        if (fileName.endsWith('.txt') || fileName.endsWith('.md')) {
+            return {
+                text: fileBuffer.toString('utf-8'),
+                metadata: { source: fileName, category: 'uploaded' }
+            };
+        }
+        throw new Error("UNSTRUCTURED_API_KEY is missing. Cannot process PDF/Images.");
+    }
+
+    const client = new UnstructuredClient({
+        serverURL: apiUrl,
+        security: { apiKeyAuth: apiKey },
+    });
+
+    try {
+        console.log(`Sending ${fileName} to Unstructured API...`);
+        const response = await client.general.partition({
+            partitionParameters: {
+                files: {
+                    content: fileBuffer,
+                    fileName: fileName,
+                },
+                strategy: Strategy.Fast, // Use 'hi_res' for tables/images if needed
+            },
+        });
+
+        if ((response as any).statusCode === 200 && (response as any).elements) {
+            // Combine all elements into one text for now (simple RAG)
+            const fullText = (response as any).elements.map((el: any) => el.text).join('\n\n');
+            return {
+                text: fullText,
+                metadata: { 
+                    source: fileName, 
+                    category: 'uploaded',
+                    lastUpdated: new Date()
+                }
+            };
+        } else {
+            throw new Error(`Unstructured API failed with status ${(response as any).statusCode}`);
+        }
+
+    } catch (error) {
+        console.error("Unstructured processing error:", error);
+        throw error;
+    }
 }
 
 /**

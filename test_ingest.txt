@@ -1,0 +1,1 @@
+This is a secure test for Unstructured ingestion. It should bypass the API key check for txt files.
